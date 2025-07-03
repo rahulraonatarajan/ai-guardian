@@ -1,5 +1,5 @@
 name: 'NoAI Guardian'
-description: 'GitHub Action that audits repo for AI-opt-out protections and recommends fixes to keep your content out of model-training datasets'
+description: 'GitHub Action that audits HTML/robots.txt for noAI opt-outs, auto-fixes gaps, and keeps your repo out of AI training sets'
 author: 'Rahul Rao Natarajan <rahulraonatarajan@gmail.com>'
 
 inputs:
