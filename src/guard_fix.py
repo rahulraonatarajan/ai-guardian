@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 NoAI Guardian + FixBot · Rahul Rao Natarajan
-Scans a project for AI-opt-out directives, can auto-patch & stage fixes,
-and produces a **detailed** GitHub-Actions summary with failure reasons.
+Audits a repo for AI-opt-out directives, optionally patches them,
+and produces a **human-friendly table** in the GitHub-Actions Job Summary:
+
+| File | Status | Reason | Fix (what & where) |
 
 Contact · rahulraonatarajan@gmail.com
 """
-
 from __future__ import annotations
 
 import argparse
@@ -41,59 +42,82 @@ AI_BOTS = [
 
 
 def find_html(root: Path) -> List[Path]:
-    """Return recursive list of *.html / *.htm files."""
+    """Return *.html / *.htm files under root."""
     return [p for p in root.rglob("*") if p.suffix.lower() in {".html", ".htm"}]
 
 
-def patch_html(path: Path, fix: bool) -> Tuple[bool, str]:
-    """Return (passed, reason). On --fix will inject META_TAG if missing."""
+def patch_html(path: Path, fix: bool) -> Tuple[bool, str, str]:
+    """
+    Make sure file contains META_TAG.
+    Returns (passed, reason, fix_snippet).
+    """
     text = path.read_text("utf-8", "ignore")
     if META_TAG.lower() in text.lower():
-        return True, ""
+        return True, "", ""
 
     if not fix:
-        return False, "meta tag missing"
+        return False, "meta tag missing", META_TAG
 
-    # Try to insert meta tag after first <head>
     patched, n = re.subn(r"(<head[^>]*>)", r"\1\n  " + META_TAG, text, 1, flags=re.I)
     if n:
         path.write_text(patched, "utf-8")
-        return True, ""
-    return False, "<head> tag not found; cannot inject meta"
+        return True, "", ""
+    return False, "<head> tag not found", META_TAG
 
 
-def patch_robots(root: Path, fix: bool) -> Tuple[bool, str]:
-    """Ensure robots.txt blocks all AI_BOTS. Return (passed, reason)."""
+def patch_robots(root: Path, fix: bool) -> Tuple[bool, str, str]:
+    """
+    Ensure robots.txt blocks all AI_BOTS.
+    Returns (passed, reason, fix_snippet).
+    """
     robots = root / "robots.txt"
     content = robots.read_text("utf-8", "ignore") if robots.exists() else ""
     missing = [b for b in AI_BOTS if b.lower() not in content.lower()]
 
     if not missing:
-        return True, ""
+        return True, "", ""
+
+    snippet = "\n".join(f"User-agent: {b}\nDisallow: /" for b in missing)
 
     if not fix:
-        return False, f"missing bot rule(s): {', '.join(missing)}"
+        return False, f"missing bot rule(s): {', '.join(missing)}", snippet
 
-    # Append rules only for the bots that are missing
-    lines = [f"User-agent: {b}\nDisallow: /" for b in missing]
-    robots.write_text(content.rstrip() + "\n" + "\n".join(lines) + "\n", "utf-8")
-    return True, ""
+    robots.write_text(content.rstrip() + "\n" + snippet + "\n", "utf-8")
+    return True, "", ""
 
 
-def write_job_summary(results: Dict[str, Tuple[bool, str]]) -> None:
-    """Render a Markdown checklist with failure reasons into Job Summary."""
-    summary = ["## NoAI Guardian Report", ""]
-    for file_name, (passed, reason) in results.items():
-        emoji = "✅" if passed else "❌"
-        if passed:
-            summary.append(f"- {emoji} **{file_name}**")
+def write_job_summary(results: Dict[str, Dict[str, str]]) -> None:
+    """
+    Render a Markdown table (no collapsible blocks) with explicit fix guidance.
+    """
+    summary = [
+        "## NoAI Guardian Report",
+        "",
+        "| File | Status | Reason | Fix <br>(what & where) |",
+        "|------|--------|--------|------------------------|",
+    ]
+
+    for fname, data in results.items():
+        status = "✅ Pass" if data["passed"] else "❌ Fail"
+        reason = data["reason"] or "—"
+
+        # Build fix cell
+        if data["passed"]:
+            fix_cell = "—"
+        elif fname == "robots.txt":
+            fix_cell = f"Add to **/robots.txt**:<br>`{data['fix'].strip().replace(chr(10), ' ; ')}`"
         else:
-            summary.append(f"- {emoji} **{file_name}** — {reason}")
-    summary.append("")
+            fix_cell = (
+                f"Insert inside `<head>` of **{fname}**:<br>"
+                f"`{META_TAG}`"
+            )
 
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        Path(summary_path).write_text("\n".join(summary), "utf-8")
+        summary.append(f"| **{fname}** | {status} | {reason} | {fix_cell} |")
+
+    summary.append("")  # trailing newline
+
+    if path := os.environ.get("GITHUB_STEP_SUMMARY"):
+        Path(path).write_text("\n".join(summary), "utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -102,7 +126,7 @@ def write_job_summary(results: Dict[str, Tuple[bool, str]]) -> None:
 
 
 def main() -> None:
-    # Clean out any empty args the runner might inject
+    # Remove blank arguments that GitHub could inject
     sys.argv = [a for a in sys.argv if a.strip()]
 
     parser = argparse.ArgumentParser(description="Audit / auto-fix AI opt-out rules")
@@ -112,38 +136,44 @@ def main() -> None:
 
     root = Path(args.path).resolve()
 
-    detailed_results: Dict[str, Tuple[bool, str]] = {}
+    # results[file] = {passed, reason, fix}
+    results: Dict[str, Dict[str, str]] = {}
     all_ok = True
 
-    # ----- HTML pass -----
+    # ---- HTML files ----
     for html_file in find_html(root):
-        passed, reason = patch_html(html_file, args.fix)
-        detailed_results[str(html_file.relative_to(root))] = (passed, reason)
+        passed, reason, snippet = patch_html(html_file, args.fix)
+        results[str(html_file.relative_to(root))] = {
+            "passed": passed,
+            "reason": reason,
+            "fix": snippet,
+        }
         all_ok &= passed
 
-    # ----- robots.txt -----
-    robots_passed, robots_reason = patch_robots(root, args.fix)
-    detailed_results["robots.txt"] = (robots_passed, robots_reason)
-    all_ok &= robots_passed
+    # ---- robots.txt ----
+    rob_pass, rob_reason, rob_snip = patch_robots(root, args.fix)
+    results["robots.txt"] = {"passed": rob_pass, "reason": rob_reason, "fix": rob_snip}
+    all_ok &= rob_pass
 
-    # ----- JSON report for logs / API -----
-    json_report = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "passed": all_ok,
-        "details": {
-            f: {"passed": res[0], "reason": res[1]} for f, res in detailed_results.items()
-        },
-    }
-    print(json.dumps(json_report, indent=2))
+    # ---- JSON log ----
+    print(
+        json.dumps(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "passed": all_ok,
+                "details": results,
+            },
+            indent=2,
+        )
+    )
 
-    # ----- Job Summary for GitHub UI -----
-    write_job_summary(detailed_results)
+    # ---- Markdown summary ----
+    write_job_summary(results)
 
-    # ----- Stage fixes (if requested) -----
+    # ---- git add when fixes applied ----
     if args.fix:
         subprocess.run(["git", "add", "."], check=False)
 
-    # Fail CI if anything still non-compliant
     if not all_ok:
         sys.exit(1)
 
