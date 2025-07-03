@@ -1,0 +1,22 @@
+name: 'NoAI Guardian Action'
+description: 'Audit & auto-fix AI opt-out directives'
+author: 'Rahul Rao Natarajan <rahulraonatarajan@gmail.com>'
+inputs:
+  path:
+    description: 'Folder to scan'
+    required: false
+    default: '.'
+  fix:
+    description: 'Set true to auto-fix'
+    required: false
+    default: 'false'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - --path
+    - ${{ inputs.path }}
+    - ${{ (inputs.fix == 'true' && '--fix') || '' }}
+branding:
+  icon: 'shield'
+  color: 'blue'
