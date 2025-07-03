@@ -1,24 +1,33 @@
 name: 'NoAI Guardian Action'
 description: 'Audit & auto-fix AI opt-out directives'
 author: 'Rahul Rao Natarajan <rahulraonatarajan@gmail.com>'
+
 inputs:
   path:
-    description: 'Folder to scan'
+    description: 'Folder (relative to repo root) to scan'
     required: false
     default: '.'
   fix:
-    description: 'Set true to auto-fix'
+    description: 'Set to true to auto-patch violations'
     required: false
     default: 'false'
+
 runs:
   using: 'docker'
   image: 'Dockerfile'
+
+  # Override the image ENTRYPOINT with a shell wrapper
+  entrypoint: /bin/sh
   args:
-    - /bin/sh
     - -c
-    - >
-      python /guard_fix.py --path "${{ inputs.path }}"
-      ${{ inputs.fix == 'true' && '--fix' || '' }}
+    - |
+      set -e
+      if [ "${{ inputs.fix }}" = "true" ]; then
+        python /guard_fix.py --path "${{ inputs.path }}" --fix
+      else
+        python /guard_fix.py --path "${{ inputs.path }}"
+      fi
+
 branding:
   icon: 'shield'
   color: 'blue'
