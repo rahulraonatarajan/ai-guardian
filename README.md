@@ -1,23 +1,31 @@
-# NoAI Guardian GitHub Action 🛡️  
+# NoAI Guardian – AI Opt-Out Compliance Action 🛡️  
 
-**Author:** Rahul Rao Natarajan · rahulraonatarajan@gmail.com  
-Automate AI‑opt‑out compliance for any website or static‑site codebase.
-
-GitHub Action that audits repo for AI-opt-out protections and recommends fixes to keep your content out of model-training datasets
-
-| What it does | How |
-|--------------|-----|
-| **Audit** every HTML file for `<meta name="robots" content="noai, noimageai">` | Regex/DOM scan, JSON report |
-| **Audit** `robots.txt` for AI‑crawler blocks (GPTBot, Google‑Extended, ClaudeBot, Perplexity…) | Pattern matching |
-| **Auto‑Fix** *(optional)* | Injects missing meta tag after `<head>` and appends missing bot rules to `robots.txt` |
-| **CI fail gate** | Exits non‑zero if violations remain |
-| **Git staging** | When `fix: true`, runs `git add .` so later steps can commit/PR them |
+**GitHub Action that scans your repository for missing AI-opt-out directives, then patches or proposes fixes so your content stays out of model-training datasets.**
 
 ---
 
-## Quick Start
+## ✨ What it does
 
-Create `.github/workflows/noai.yml` in your repo:
+| Capability | Details |
+|------------|---------|
+| **Audit**  | Scans every HTML file for `<meta name="robots" content="noai, noimageai">` and checks `robots.txt` for blocks on GPTBot, Google-Extended, ClaudeBot, Perplexity, CCBot, aiCrawler … |
+| **Auto-Fix** <br>*(opt-in)* | Injects the meta tag after `<head>` and adds any missing crawler rules to `robots.txt`, then stages changes with `git add .`. |
+| **Actionable report** | Job Summary prints a table—**File ▸ Status ▸ Reason ▸ Fix (what & where)**—so you can copy-paste the snippet or merge the auto-PR. |
+| **CI gate** | Workflow fails if violations remain, protecting future commits. |
+
+### 📋 Sample Job-Summary output
+
+| File        | Status | Reason                                   | Fix (what & where) |
+|-------------|--------|------------------------------------------|--------------------|
+| robots.txt  | ❌ Fail | missing bot rule(s): GPTBot, ClaudeBot   | Add to **/robots.txt**:<br>`User-agent: GPTBot`<br>`Disallow: /`<br>`User-agent: ClaudeBot`<br>`Disallow: /` |
+| index.html  | ❌ Fail | meta tag missing                         | Insert inside `<head>` of **index.html**:<br>`<meta name="robots" content="noai, noimageai">` |
+| about.html  | ✅ Pass | —                                        | — |
+
+*(If `fix: true`, these edits are applied automatically and pushed via an auto-PR.)*
+
+---
+
+## 🚀 Quick start
 
 ```yaml
 name: AI Opt-Out CI
@@ -29,82 +37,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # -------- Audit-only (red build if violations remain) --------
+      # Audit only (fails build when violations exist)
       - uses: rahulrao/noai-guardian-action@v0.1.0
         with:
           path: '.'
 
-      # -------- Audit + auto-fix + open PR -------------------------
+      # Audit + auto-fix + open PR  (recommended)
       - uses: rahulrao/noai-guardian-action@v0.1.0
         id: guard
         with:
           path: '.'
-          fix: 'true'       # patch files & git add them
+          fix: 'true'
 
-      # Commit & PR the staged fixes
       - uses: peter-evans/create-pull-request@v5
-        if: failure()       # runs only when Guardian found problems
+        if: failure()                     # runs only when Guardian finds problems
         with:
           branch: noai/fixes
-          title: 'chore: AI opt-out compliance fixes'
+          title: 'AI opt-out compliance fixes'
 ```
 
 ---
 
-## Inputs
+## 🔧 Inputs
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `path` | `.` | Directory to scan (usually repo root) |
-| `fix`  | `false` | `true` ⇒ auto‑patch violations and `git add` the changes |
+| `path` | `.`     | Folder to scan (relative to repo root) |
+| `fix`  | `false` | `true` ⇒ auto-patch violations and `git add` changes |
 
 ---
 
-## What Gets Checked
-
-| Layer          | Pass condition |
-|----------------|----------------|
-| **HTML meta**  | `<meta name="robots" content="noai, noimageai">` present anywhere inside `<head>` |
-| **robots.txt** | Includes `Disallow: /` rules for GPTBot, Google‑Extended, Anthropic/Claude, PerplexityBot, CCBot, aiCrawler |
-
-### Auto‑Fix Details (`fix: true`)
-
-1. **Meta tag** is inserted right after the first `<head>` (idempotent).  
-2. **robots.txt** is created (if missing) or appended with any missing bot rules.  
-3. Files are **staged** so a later step (e.g., `create-pull-request`) can commit them.
-
----
-
-## Local Test
+## 🛠️ Local test
 
 ```bash
-# Build the container image
 docker build -t noai-guardian .
-
-# Audit mode (non-fix)
-docker run --rm -v "$PWD":/repo -w /repo noai-guardian --path .
-
-# Audit + auto-fix
 docker run --rm -v "$PWD":/repo -w /repo noai-guardian --path . --fix
 ```
 
 ---
 
-## Roadmap ▶️
+## 🗺️ Roadmap
 
 | Version | Planned feature |
 |---------|-----------------|
-| **v0.2** | _Tiny SLM mode_ – optional flag to invoke TinyLlama‑1.1B for context‑aware, line‑preserving diffs |
-| **v0.3** | Scheduled monitoring: nightly crawl + Slack / email alerts |
-| **v0.4** | Edge injector: Cloudflare Worker to add headers/tags on the fly for locked‑down CMSs |
+| **v0.2** | TinyLlama on-runner for context-aware diffs |
+| **v0.3** | Nightly monitoring + Slack/email alerts |
+| **v0.4** | Cloudflare Worker “edge injector” for locked-down CMSs |
 
 ---
-
-## Contributing
-
-PRs + issues welcome!  
-* Style: run `black .` before committing.  
-* Tests: add unit tests for new logic under `tests/`.
-
----
-
