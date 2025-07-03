@@ -6,15 +6,6 @@
 
 ---
 
-## ✨ What it does
-
-| Capability | Details |
-|------------|---------|
-| **Audit**  | Scans every HTML file for `<meta name="robots" content="noai, noimageai">` and checks `robots.txt` for blocks on GPTBot, Google-Extended, ClaudeBot, Perplexity, CCBot, aiCrawler … |
-| **Auto-Fix** <br>*(opt-in)* | Injects the meta tag after `<head>` and adds any missing crawler rules to `robots.txt`, then stages changes with `git add .`. |
-| **Actionable report** | Job Summary prints a table—**File ▸ Status ▸ Reason ▸ Fix (what & where)**—so you can copy-paste the snippet or merge the auto-PR. |
-| **CI gate** | Workflow fails if violations remain, protecting future commits. |
-
 ### 📋 Sample Job-Summary output
 
 | File        | Status | Reason                                   | Fix (what & where) |
@@ -25,6 +16,14 @@
 
 *(If `fix: true`, these edits are applied automatically and pushed via an auto-PR.)*
 
+## ✨ What it does
+
+| Capability | Details |
+|------------|---------|
+| **Audit**  | Scans every HTML file for `<meta name="robots" content="noai, noimageai">` and checks `robots.txt` for blocks on GPTBot, Google-Extended, ClaudeBot, Perplexity, CCBot, aiCrawler … |
+| **Auto-Fix** <br>*(opt-in)* | Injects the meta tag after `<head>` and adds any missing crawler rules to `robots.txt`, then stages changes with `git add .`. |
+| **Actionable report** | Job Summary prints a table—**File ▸ Status ▸ Reason ▸ Fix (what & where)**—so you can copy-paste the snippet or merge the auto-PR. |
+| **CI gate** | Workflow fails if violations remain, protecting future commits. |
 ---
 
 ## 🚀 Quick start
