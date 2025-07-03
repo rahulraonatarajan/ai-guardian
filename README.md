@@ -3,7 +3,7 @@
 **Author:** Rahul Rao Natarajan · rahulraonatarajan@gmail.com  
 Automate AI‑opt‑out compliance for any website or static‑site codebase.
 
-A single GitHub Action that **audits** your repository for AI‑opt‑out protections and can **auto‑remediate** violations in the same run.
+GitHub Action that audits repo for AI-opt-out protections and recommends fixes to keep your content out of model-training datasets
 
 | What it does | How |
 |--------------|-----|
