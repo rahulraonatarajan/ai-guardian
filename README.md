@@ -108,6 +108,3 @@ PRs + issues welcome!
 
 ---
 
-## License
-
-MIT © 2025 Rahul Rao Natarajan
