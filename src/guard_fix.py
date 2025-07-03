@@ -1,27 +1,31 @@
-#!/usr/bin/env python3                          # Allow direct CLI execution on *nix
-
+#!/usr/bin/env python3
 """
-NoAI Guardian + FixBot  ·  Rahul Rao Natarajan  # Doc-string header
-Scans a project for AI-opt-out directives; can auto-patch and stage fixes.
+NoAI Guardian + FixBot · Rahul Rao Natarajan
+Scans a project for AI-opt-out directives, can auto-patch & stage fixes,
+and produces a **detailed** GitHub-Actions summary with failure reasons.
 
-Contact: rahulraonatarajan@gmail.com
+Contact · rahulraonatarajan@gmail.com
 """
 
-# ---------- Standard-library imports ----------
-from __future__ import annotations             # Enable postponed type hints (py≤3.10)
+from __future__ import annotations
 
-import argparse                                # Parse CLI flags
-import json                                    # Emit structured report for logs/CI
-import subprocess                              # Stage fixes via git
-import sys, re                                 # Argument tweaks / regex inject
-from pathlib import Path                       # Path manipulation that respects OS
-from typing import List                        # Static typing for lists
-from datetime import datetime, timezone        # UTC timestamp for report
-import os                                      # Access GITHUB_STEP_SUMMARY
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Tuple
 
-# ---------- Config constants ----------
-META_TAG = '<meta name="robots" content="noai, noimageai">'     # Required meta tag
-AI_BOTS = [                                                    # AI crawlers to block
+# --------------------------------------------------------------------------- #
+# Configuration
+# --------------------------------------------------------------------------- #
+
+META_TAG = '<meta name="robots" content="noai, noimageai">'
+
+AI_BOTS = [
     "GPTBot",
     "Google-Extended",
     "Anthropic",
@@ -32,128 +36,117 @@ AI_BOTS = [                                                    # AI crawlers to 
 ]
 
 # --------------------------------------------------------------------------- #
-# Utility helpers
+# Helpers
 # --------------------------------------------------------------------------- #
 
+
 def find_html(root: Path) -> List[Path]:
-    """Return all *.html / *.htm files under root (recursive)."""
+    """Return recursive list of *.html / *.htm files."""
     return [p for p in root.rglob("*") if p.suffix.lower() in {".html", ".htm"}]
 
 
-def patch_html(path: Path, fix: bool) -> bool:
-    """
-    Ensure HTML file contains META_TAG.
-    • Returns True if already compliant or successfully patched.
-    • Returns False if non-compliant and --fix not set (or patch failed).
-    """
-    text = path.read_text("utf-8", "ignore")                      # Load file
-    if META_TAG.lower() in text.lower():                         # Already ok?
-        return True
-    if not fix:                                                  # Audit-only run
-        return False
-    # Inject meta tag right after first <head>
-    patched, n = re.subn(                                        # Regex replace
-        r"(<head[^>]*>)",                                        # Match opening head
-        r"\1\n  " + META_TAG,                                    # Insert tag
-        text,
-        count=1,
-        flags=re.I,
-    )
-    if n:                                                        # Found <head>
-        path.write_text(patched, "utf-8")                        # Save patched file
-        return True
-    return False                                                 # No <head> to patch
+def patch_html(path: Path, fix: bool) -> Tuple[bool, str]:
+    """Return (passed, reason). On --fix will inject META_TAG if missing."""
+    text = path.read_text("utf-8", "ignore")
+    if META_TAG.lower() in text.lower():
+        return True, ""
+
+    if not fix:
+        return False, "meta tag missing"
+
+    # Try to insert meta tag after first <head>
+    patched, n = re.subn(r"(<head[^>]*>)", r"\1\n  " + META_TAG, text, 1, flags=re.I)
+    if n:
+        path.write_text(patched, "utf-8")
+        return True, ""
+    return False, "<head> tag not found; cannot inject meta"
 
 
-def patch_robots(root: Path, fix: bool) -> bool:
-    """
-    Ensure robots.txt disallows all AI_BOTS.
-    Works for both existing and missing robots.txt.
-    """
-    robots = root / "robots.txt"                                 # Calculate path
-    content = robots.read_text("utf-8", "ignore") if robots.exists() else ""  # Read or empty
-    compliant = all(bot.lower() in content.lower() for bot in AI_BOTS)        # Check presence
-    if compliant or not fix:                                     # Already okay (or audit-only)
-        return compliant
-    # Build lines for only the missing bots
-    lines = [
-        f"User-agent: {bot}\nDisallow: /"
-        for bot in AI_BOTS
-        if bot.lower() not in content.lower()
-    ]
-    # Append lines and write back
+def patch_robots(root: Path, fix: bool) -> Tuple[bool, str]:
+    """Ensure robots.txt blocks all AI_BOTS. Return (passed, reason)."""
+    robots = root / "robots.txt"
+    content = robots.read_text("utf-8", "ignore") if robots.exists() else ""
+    missing = [b for b in AI_BOTS if b.lower() not in content.lower()]
+
+    if not missing:
+        return True, ""
+
+    if not fix:
+        return False, f"missing bot rule(s): {', '.join(missing)}"
+
+    # Append rules only for the bots that are missing
+    lines = [f"User-agent: {b}\nDisallow: /" for b in missing]
     robots.write_text(content.rstrip() + "\n" + "\n".join(lines) + "\n", "utf-8")
-    return True
+    return True, ""
 
 
-def write_job_summary(results: dict[str, bool]) -> None:
-    """
-    Write a Markdown report to $GITHUB_STEP_SUMMARY so GitHub
-    renders a clean checklist in the Actions UI.
-    """
-    summary = ["## NoAI Guardian Report", ""]                    # Header line
-    for fname, passed in results.items():                        # Loop each file
-        emoji = "✅" if passed else "❌"                          # Pass/fail indicator
-        summary.append(f"- {emoji} **{fname}**")                 # Markdown bullet
-    summary.append("")                                           # Final newline
-    path = os.environ.get("GITHUB_STEP_SUMMARY")                 # GitHub-provided file path
-    if path:
-        Path(path).write_text("\n".join(summary), "utf-8")       # Write summary
+def write_job_summary(results: Dict[str, Tuple[bool, str]]) -> None:
+    """Render a Markdown checklist with failure reasons into Job Summary."""
+    summary = ["## NoAI Guardian Report", ""]
+    for file_name, (passed, reason) in results.items():
+        emoji = "✅" if passed else "❌"
+        if passed:
+            summary.append(f"- {emoji} **{file_name}**")
+        else:
+            summary.append(f"- {emoji} **{file_name}** — {reason}")
+    summary.append("")
+
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        Path(summary_path).write_text("\n".join(summary), "utf-8")
 
 
 # --------------------------------------------------------------------------- #
-# Main CLI entrypoint
+# Main
 # --------------------------------------------------------------------------- #
+
 
 def main() -> None:
-    # ----- Sanitize argv (GitHub might pass blank args) -----
-    sys.argv = [arg for arg in sys.argv if arg.strip()]          # Remove '' entries
+    # Clean out any empty args the runner might inject
+    sys.argv = [a for a in sys.argv if a.strip()]
 
-    # ----- CLI parsing -----
     parser = argparse.ArgumentParser(description="Audit / auto-fix AI opt-out rules")
-    parser.add_argument("--path", default=".", help="Repository folder to scan")
-    parser.add_argument("--fix", action="store_true", help="Auto-fix & git-add")
+    parser.add_argument("--path", default=".", help="Folder to scan")
+    parser.add_argument("--fix", action="store_true", help="Auto-patch violations")
     args = parser.parse_args()
 
-    root = Path(args.path).resolve()                             # Absolute root path
+    root = Path(args.path).resolve()
 
-    # ----- Scan HTML -----
-    results: dict[str, bool] = {}                                # File → pass/fail
-    all_ok = True                                                # Aggregate pass flag
-    for html_file in find_html(root):                            # Walk HTML files
-        passed = patch_html(html_file, args.fix)                 # Audit / patch
-        results[str(html_file.relative_to(root))] = passed       # Store result
-        all_ok &= passed                                         # Aggregate AND
+    detailed_results: Dict[str, Tuple[bool, str]] = {}
+    all_ok = True
 
-    # ----- Scan robots.txt -----
-    robots_ok = patch_robots(root, args.fix)                     # Audit / patch
-    results["robots.txt"] = robots_ok                            # Store result
-    all_ok &= robots_ok                                          # Aggregate AND
+    # ----- HTML pass -----
+    for html_file in find_html(root):
+        passed, reason = patch_html(html_file, args.fix)
+        detailed_results[str(html_file.relative_to(root))] = (passed, reason)
+        all_ok &= passed
 
-    # ----- Emit JSON report -----
-    print(
-        json.dumps(
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "passed": all_ok,
-                "details": results,
-            },
-            indent=2,
-        )
-    )
+    # ----- robots.txt -----
+    robots_passed, robots_reason = patch_robots(root, args.fix)
+    detailed_results["robots.txt"] = (robots_passed, robots_reason)
+    all_ok &= robots_passed
 
-    # ----- Emit human-friendly summary -----
-    write_job_summary(results)
+    # ----- JSON report for logs / API -----
+    json_report = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "passed": all_ok,
+        "details": {
+            f: {"passed": res[0], "reason": res[1]} for f, res in detailed_results.items()
+        },
+    }
+    print(json.dumps(json_report, indent=2))
 
-    # ----- Stage fixes (if any) -----
-    if args.fix:                                                 # Only when --fix
-        subprocess.run(["git", "add", "."], check=False)         # Stage all modified files
+    # ----- Job Summary for GitHub UI -----
+    write_job_summary(detailed_results)
 
-    # ----- CI exit code -----
-    if not all_ok:                                               # Any violation left?
-        sys.exit(1)                                              # Fail the job
+    # ----- Stage fixes (if requested) -----
+    if args.fix:
+        subprocess.run(["git", "add", "."], check=False)
+
+    # Fail CI if anything still non-compliant
+    if not all_ok:
+        sys.exit(1)
 
 
-# Standard Python entrypoint guard
 if __name__ == "__main__":
     main()
