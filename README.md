@@ -2,6 +2,8 @@
 
 **GitHub Action that scans your repository for missing AI-opt-out directives, then patches or proposes fixes so your content stays out of model-training datasets.**
 
+![NoAI Guardian banner](docs/noai-banner.png)
+
 ---
 
 ## ✨ What it does
