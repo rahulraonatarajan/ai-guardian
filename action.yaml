@@ -14,9 +14,11 @@ runs:
   using: 'docker'
   image: 'Dockerfile'
   args:
-    - --path
-    - ${{ inputs.path }}
-    - ${{ (inputs.fix == 'true' && '--fix') || '' }}
+    - /bin/sh
+    - -c
+    - >
+      python /guard_fix.py --path "${{ inputs.path }}"
+      ${{ inputs.fix == 'true' && '--fix' || '' }}
 branding:
   icon: 'shield'
   color: 'blue'
