@@ -8,7 +8,8 @@ jobs:
       - uses: actions/checkout@v4
 
       # Call the action from your repo (main branch)
-      - uses: rahulrao/noai-guardian-action@main
+      - uses: ./.        # ← dot-slash means “the Action in this repo”
         with:
           path: '.'
-          fix: 'false'      # audit-only
+          fix: 'false'
+
