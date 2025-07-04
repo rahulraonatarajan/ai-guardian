@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: NoAI Guardian
-        uses: rahulraonatarajan/ai-guardian@v1.0.1
+        uses: rahulraonatarajan/ai-guardian@v1.0.2
         with:
           path: '.'
           fix: 'false'  # Set to 'true' to auto-patch violations
