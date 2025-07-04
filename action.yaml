@@ -4,24 +4,21 @@ author: "rahulraonatarajan"
 
 inputs:
   path:
-    description: "Path to the repo folder to scan"
+    description: "Folder to scan"
     required: false
     default: "."
-
   fix:
-    description: "Set to true to auto-fix and stage violations"
+    description: "Set true to auto-fix"
     required: false
     default: "false"
 
 runs:
-  using: "composite"
-  steps:
-    - name: Run NoAI Guardian
-      shell: bash
-      run: |
-        python3 ${{ github.action_path }}/guard_fix.py \
-          --path "${{ inputs.path }}" \
-          ${{ inputs.fix == 'true' && '--fix' || '' }}
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - --path
+    - ${{ inputs.path }}
+    - ${{ inputs.fix == 'true' && '--fix' || '' }}
 
 branding:
   icon: "shield"
