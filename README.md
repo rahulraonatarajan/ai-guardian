@@ -26,37 +26,32 @@
 | **CI gate** | Workflow fails if violations remain, protecting future commits. |
 ---
 
-## 🚀 Quick start
+## 🚀 Usage
+
+Add this to your workflow file (e.g. `.github/workflows/noai.yml`):
 
 ```yaml
-name: AI Opt-Out CI
-on: [push]
+name: Run NoAI Guardian
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  guard:
+  noai-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # Audit only (fails build when violations exist)
-      - uses: rahulrao/noai-guardian-action@v0.1.0
+      - name: NoAI Guardian
+        uses: rahulraonatarajan/ai-guardian@v1.0.1
         with:
           path: '.'
-
-      # Audit + auto-fix + open PR  (recommended)
-      - uses: rahulrao/noai-guardian-action@v0.1.0
-        id: guard
-        with:
-          path: '.'
-          fix: 'true'
-
-      - uses: peter-evans/create-pull-request@v5
-        if: failure()                     # runs only when Guardian finds problems
-        with:
-          branch: noai/fixes
-          title: 'AI opt-out compliance fixes'
+          fix: 'false'  # Set to 'true' to auto-patch violations
 ```
-
 ---
 
 ## 🔧 Inputs
