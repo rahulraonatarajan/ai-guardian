@@ -1,33 +1,28 @@
-name: 'NoAI Guardian'
-description: 'GitHub Action that audits HTML/robots.txt for noAI opt-outs, auto-fixes gaps, and keeps your repo out of AI training sets'
-author: 'Rahul Rao Natarajan <rahulraonatarajan@gmail.com>'
+name: "NoAI Guardian"
+description: "GitHub Action that audits HTML/robots.txt for noAI opt-outs, auto-fixes gaps, and keeps your repo out of AI training sets"
+author: "rahulraonatarajan"
 
 inputs:
   path:
-    description: 'Folder (relative to repo root) to scan'
+    description: "Path to the repo folder to scan"
     required: false
-    default: '.'
+    default: "."
+
   fix:
-    description: 'Set to true to auto-patch violations'
+    description: "Set to true to auto-fix and stage violations"
     required: false
-    default: 'false'
+    default: "false"
 
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
-
-  # Override the image ENTRYPOINT with a shell wrapper
-  entrypoint: /bin/sh
-  args:
-    - -c
-    - |
-      set -e
-      if [ "${{ inputs.fix }}" = "true" ]; then
-        python /guard_fix.py --path "${{ inputs.path }}" --fix
-      else
-        python /guard_fix.py --path "${{ inputs.path }}"
-      fi
+  using: "composite"
+  steps:
+    - name: Run NoAI Guardian
+      shell: bash
+      run: |
+        python3 ${{ github.action_path }}/guard_fix.py \
+          --path "${{ inputs.path }}" \
+          ${{ inputs.fix == 'true' && '--fix' || '' }}
 
 branding:
-  icon: 'shield'
-  color: 'blue'
+  icon: "shield"
+  color: "blue"
